@@ -6,24 +6,53 @@
 import type { Reminder } from '../types/index.js';
 import { applyReminderFilters, type ReminderFilters } from './dateFiltering.js';
 
-describe('DateFiltering', () => {
-  // Mock Date to ensure consistent test results
-  const mockNow = new Date('2024-01-15T00:00:00.000Z');
-  const RealDate = global.Date;
+const DEFAULT_TZ = process.env.TZ;
+const MOCK_NOW_ISO = '2024-01-15T12:00:00.000Z';
+const RealDate = global.Date;
 
-  beforeEach(() => {
-    global.Date = class extends RealDate {
-      constructor(...args: ConstructorParameters<typeof RealDate>) {
-        if (args.length === (0 as number)) {
-          super(mockNow);
-        } else {
-          super(...args);
-        }
+const restoreDefaultTimezone = () => {
+  if (DEFAULT_TZ) {
+    process.env.TZ = DEFAULT_TZ;
+  } else {
+    delete process.env.TZ;
+  }
+};
+
+const installDateMock = () => {
+  const mockNow = new RealDate(MOCK_NOW_ISO);
+
+  global.Date = class extends RealDate {
+    constructor(...args: ConstructorParameters<typeof RealDate>) {
+      if (args.length === (0 as number)) {
+        super(mockNow);
+      } else {
+        super(...args);
       }
-    } as typeof global.Date;
+    }
+
+    static now(): number {
+      return mockNow.getTime();
+    }
+  } as typeof global.Date;
+};
+
+const resetDateMock = () => {
+  global.Date = RealDate;
+  installDateMock();
+};
+
+const setTimezoneAndResetDateMock = (tz: string) => {
+  process.env.TZ = tz;
+  resetDateMock();
+};
+
+describe('DateFiltering', () => {
+  beforeEach(() => {
+    resetDateMock();
   });
 
   afterEach(() => {
+    restoreDefaultTimezone();
     global.Date = RealDate;
   });
 
@@ -273,6 +302,48 @@ describe('DateFiltering', () => {
       // Should return all reminders with due dates (default branch behavior)
       expect(result).toHaveLength(2);
       expect(result.map((r) => r.id)).toEqual(['1', '2']);
+    });
+
+    describe('timezone handling for floating dates', () => {
+      it('should treat YYYY-MM-DD due dates as today for America/New_York timezone', () => {
+        setTimezoneAndResetDateMock('America/New_York');
+        const floatingReminders: Reminder[] = [
+          {
+            id: 'floating-date',
+            title: 'Floating date',
+            dueDate: '2024-01-15',
+            list: 'Default',
+            isCompleted: false,
+          },
+        ];
+
+        const result = applyReminderFilters(floatingReminders, {
+          dueWithin: 'today',
+        });
+
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toBe('floating-date');
+      });
+
+      it('should treat local datetime strings without timezone as today for America/New_York timezone', () => {
+        setTimezoneAndResetDateMock('America/New_York');
+        const floatingDateTimeReminders: Reminder[] = [
+          {
+            id: 'floating-datetime',
+            title: 'Floating datetime',
+            dueDate: '2024-01-15 09:30:00',
+            list: 'Default',
+            isCompleted: false,
+          },
+        ];
+
+        const result = applyReminderFilters(floatingDateTimeReminders, {
+          dueWithin: 'today',
+        });
+
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toBe('floating-datetime');
+      });
     });
   });
 });

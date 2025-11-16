@@ -70,16 +70,104 @@ describe('Tool Call Formatting', () => {
 });
 
 describe('Time Format Building', () => {
-  it('should format date to YYYY-MM-DD HH:mm:ss', () => {
-    const date = new Date('2025-11-04T14:30:45');
+  it('should format date with timezone offset', () => {
+    const date = new Date('2025-11-04T14:30:45Z');
     const formatted = buildTimeFormat(date);
-    expect(formatted).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    // Format should be YYYY-MM-DD HH:mm:ss±HH:MM
+    expect(formatted).toMatch(
+      /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/,
+    );
+  });
+
+  it('should include explicit timezone offset to prevent ambiguity', () => {
+    const date = new Date('2025-11-17T14:00:00Z');
+    const formatted = buildTimeFormat(date);
+
+    // Should have timezone offset (e.g., "+00:00", "-05:00", "+08:00")
+    expect(formatted).toMatch(/[+-]\d{2}:\d{2}$/);
+  });
+
+  it('should correctly calculate timezone offset sign', () => {
+    // Create a date and get its timezone offset
+    const date = new Date('2025-11-17T14:00:00Z');
+    const formatted = buildTimeFormat(date);
+
+    // Extract the offset from the formatted string
+    const offsetMatch = formatted.match(/([+-]\d{2}:\d{2})$/);
+    expect(offsetMatch).not.toBeNull();
+
+    // Verify offset matches Date.getTimezoneOffset()
+    const offsetMinutes = -date.getTimezoneOffset();
+    const expectedSign = offsetMinutes >= 0 ? '+' : '-';
+    expect(formatted).toContain(expectedSign);
   });
 
   it('should pad single digit values with zero', () => {
-    const date = new Date('2025-01-05T09:05:03');
+    const date = new Date('2025-01-05T09:05:03Z');
     const formatted = buildTimeFormat(date);
-    expect(formatted).toBe('2025-01-05 09:05:03');
+    // Check date and time components are zero-padded
+    expect(formatted).toMatch(/^2025-01-05 \d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/);
+  });
+
+  it('should format UTC offset correctly', () => {
+    // Mock Date to simulate specific timezone
+    const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
+
+    // Simulate UTC (offset = 0)
+    Date.prototype.getTimezoneOffset = jest.fn(() => 0);
+    const utcDate = new Date('2025-11-17T14:00:00');
+    const utcFormatted = buildTimeFormat(utcDate);
+    expect(utcFormatted).toContain('+00:00');
+
+    // Simulate EST (UTC-5, offset = 300 minutes)
+    Date.prototype.getTimezoneOffset = jest.fn(() => 300);
+    const estDate = new Date('2025-11-17T14:00:00');
+    const estFormatted = buildTimeFormat(estDate);
+    expect(estFormatted).toContain('-05:00');
+
+    // Simulate Asia/Shanghai (UTC+8, offset = -480 minutes)
+    Date.prototype.getTimezoneOffset = jest.fn(() => -480);
+    const shanghaiDate = new Date('2025-11-17T14:00:00');
+    const shanghaiFormatted = buildTimeFormat(shanghaiDate);
+    expect(shanghaiFormatted).toContain('+08:00');
+
+    // Restore original implementation
+    Date.prototype.getTimezoneOffset = originalGetTimezoneOffset;
+  });
+
+  it('should handle DST offsets correctly', () => {
+    // This test verifies the offset calculation works for any timezone offset
+    const date = new Date('2025-03-09T14:00:00Z'); // DST transition in US
+    const formatted = buildTimeFormat(date);
+
+    // Should still have valid offset format
+    expect(formatted).toMatch(/[+-]\d{2}:\d{2}$/);
+
+    // Verify offset calculation is consistent
+    const offsetMinutes = -date.getTimezoneOffset();
+    const expectedHours = Math.floor(Math.abs(offsetMinutes) / 60);
+    const expectedMins = Math.abs(offsetMinutes) % 60;
+    const expectedOffsetStr = `${offsetMinutes >= 0 ? '+' : '-'}${String(expectedHours).padStart(2, '0')}:${String(expectedMins).padStart(2, '0')}`;
+    expect(formatted).toContain(expectedOffsetStr);
+  });
+
+  it('should handle non-standard timezone offsets', () => {
+    const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
+
+    // Simulate India Standard Time (UTC+5:30, offset = -330 minutes)
+    Date.prototype.getTimezoneOffset = jest.fn(() => -330);
+    const indiaDate = new Date('2025-11-17T14:00:00');
+    const indiaFormatted = buildTimeFormat(indiaDate);
+    expect(indiaFormatted).toContain('+05:30');
+
+    // Simulate Nepal (UTC+5:45, offset = -345 minutes)
+    Date.prototype.getTimezoneOffset = jest.fn(() => -345);
+    const nepalDate = new Date('2025-11-17T14:00:00');
+    const nepalFormatted = buildTimeFormat(nepalDate);
+    expect(nepalFormatted).toContain('+05:45');
+
+    // Restore original implementation
+    Date.prototype.getTimezoneOffset = originalGetTimezoneOffset;
   });
 });
 

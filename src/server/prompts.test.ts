@@ -98,8 +98,20 @@ describe('prompt templates', () => {
 
   describe('reminder-review-assistant', () => {
     it.each([
-      ['null arguments', null, [/strategist and productivity coach/i, /### Current state/i, /### Action queue/i]],
-      ['undefined arguments', undefined, [/strategist and productivity coach/i]],
+      [
+        'null arguments',
+        null,
+        [
+          /strategist and productivity coach/i,
+          /### Current state/i,
+          /### Action queue/i,
+        ],
+      ],
+      [
+        'undefined arguments',
+        undefined,
+        [/strategist and productivity coach/i],
+      ],
       [
         'custom review focus',
         { review_focus: 'overdue tasks' },
