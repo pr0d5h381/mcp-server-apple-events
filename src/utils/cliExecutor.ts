@@ -13,10 +13,6 @@ import {
   getEnvironmentBinaryConfig,
 } from './binaryValidator.js';
 import { FILE_SYSTEM } from './constants.js';
-import {
-  type PermissionDomain,
-  triggerPermissionPrompt,
-} from './permissionPrompt.js';
 import { findProjectRoot } from './projectUtils.js';
 
 const execFilePromise = (
@@ -54,26 +50,6 @@ type CliResponse<T> = CliSuccessResponse<T> | CliErrorResponse;
 /**
  * Calendar action strings used in Swift CLI (different from MCP tool action names)
  */
-const CALENDAR_ACTION_SET = new Set<string>([
-  'read-events',
-  'read-calendars',
-  'create-event',
-  'update-event',
-  'delete-event',
-]);
-
-class CliPermissionError extends Error {
-  constructor(
-    message: string,
-    public readonly domain: PermissionDomain,
-  ) {
-    super(message);
-    this.name = 'CliPermissionError';
-    Object.setPrototypeOf(this, new.target.prototype);
-  }
-}
-
-const PERMISSION_KEYWORDS = ['permission', 'authoriz'];
 
 const bufferToString = (data?: string | Buffer | null): string | null => {
   if (typeof data === 'string') return data;
@@ -81,39 +57,8 @@ const bufferToString = (data?: string | Buffer | null): string | null => {
   return data == null ? null : String(data);
 };
 
-const extractAction = (args: string[]): string | undefined => {
-  const actionIndex = args.indexOf('--action');
-  if (actionIndex >= 0 && actionIndex + 1 < args.length) {
-    return args[actionIndex + 1];
-  }
-  return undefined;
-};
 
-const inferDomainFromArgs = (args: string[]): PermissionDomain => {
-  const action = extractAction(args);
-  if (action && CALENDAR_ACTION_SET.has(action)) {
-    return 'calendars';
-  }
-  return 'reminders';
-};
-
-const detectPermissionDomain = (
-  message: string,
-  args: string[],
-): PermissionDomain | null => {
-  const lower = message.toLowerCase();
-  const mentionsPermission = PERMISSION_KEYWORDS.some((keyword) =>
-    lower.includes(keyword),
-  );
-  if (!mentionsPermission) {
-    return null;
-  }
-  if (lower.includes('reminder')) return 'reminders';
-  if (lower.includes('calendar')) return 'calendars';
-  return inferDomainFromArgs(args);
-};
-
-const parseCliOutput = <T>(output: string, args: string[]): T => {
+const parseCliOutput = <T>(output: string): T => {
   let parsed: CliResponse<T>;
   try {
     parsed = JSON.parse(output) as CliResponse<T>;
@@ -123,11 +68,6 @@ const parseCliOutput = <T>(output: string, args: string[]): T => {
 
   if (parsed.status === 'success') {
     return parsed.result;
-  }
-
-  const domain = detectPermissionDomain(parsed.message, args);
-  if (domain) {
-    throw new CliPermissionError(parsed.message, domain);
   }
   throw new Error(parsed.message);
 };
