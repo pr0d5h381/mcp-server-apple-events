@@ -22,17 +22,15 @@ import {
 
 class ReminderRepository {
   private mapReminder(reminder: ReminderJSON): Reminder {
-    // Pass dueDate as-is from Swift CLI to avoid double timezone conversion
-    const formattedDueDate = reminder.dueDate ?? undefined;
-
     const normalizedReminder = nullToUndefined(reminder, [
       'notes',
       'url',
       'dueDate',
     ]) as Reminder;
 
-    if (formattedDueDate) {
-      normalizedReminder.dueDate = formattedDueDate;
+    // Pass dueDate as-is from Swift CLI to avoid double timezone conversion
+    if (reminder.dueDate) {
+      normalizedReminder.dueDate = reminder.dueDate;
     } else {
       delete normalizedReminder.dueDate;
     }
