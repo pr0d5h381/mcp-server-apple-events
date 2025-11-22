@@ -12,7 +12,7 @@ import type {
   ListsToolArgs,
   RemindersToolArgs,
 } from '../types/index.js';
-import { MESSAGES } from '../utils/constants.js';
+import { MESSAGES, TOOLS as TOOL_NAMES } from '../utils/constants.js';
 import { TOOLS } from './definitions.js';
 import {
   handleCreateCalendarEvent,
@@ -43,12 +43,7 @@ import {
  * await handleToolCall('reminders_tasks', { action: 'create', title: 'New task' });
  * await handleToolCall('calendar.events', { action: 'read', search: 'meeting' });
  */
-const TOOL_ALIASES: Record<string, string> = {
-  'reminders.tasks': 'reminders_tasks',
-  'reminders.lists': 'reminders_lists',
-  'calendar.events': 'calendar_events',
-  'calendar.calendars': 'calendar_calendars',
-};
+const TOOL_ALIASES: Record<string, string> = TOOL_NAMES.ALIASES;
 
 function normalizeToolName(name: string): string {
   return TOOL_ALIASES[name] ?? name;
@@ -78,40 +73,52 @@ const createActionRouter = <TArgs extends { action: string }>(
       return createErrorResponse('No arguments provided');
     }
 
+    // Type assertion is necessary here due to union type narrowing limitations
+    // The router map ensures type safety at the configuration level
     const typedArgs = args as TArgs;
-    const handler = handlerMap[typedArgs.action as TArgs['action']];
+    const action = typedArgs.action;
 
-    if (!handler) {
+    if (!(action in handlerMap)) {
       return createErrorResponse(
-        MESSAGES.ERROR.UNKNOWN_ACTION(toolName, String(typedArgs.action)),
+        MESSAGES.ERROR.UNKNOWN_ACTION(toolName, String(action)),
       );
     }
 
+    const handler = handlerMap[action as keyof typeof handlerMap];
     return handler(typedArgs);
   };
 };
 
 const TOOL_ROUTER_MAP = {
-  reminders_tasks: createActionRouter<RemindersToolArgs>('reminders_tasks', {
-    read: (reminderArgs) => handleReadReminders(reminderArgs),
-    create: (reminderArgs) => handleCreateReminder(reminderArgs),
-    update: (reminderArgs) => handleUpdateReminder(reminderArgs),
-    delete: (reminderArgs) => handleDeleteReminder(reminderArgs),
-  }),
-  reminders_lists: createActionRouter<ListsToolArgs>('reminders_lists', {
-    read: async (_listArgs) => handleReadReminderLists(),
-    create: (listArgs) => handleCreateReminderList(listArgs),
-    update: (listArgs) => handleUpdateReminderList(listArgs),
-    delete: (listArgs) => handleDeleteReminderList(listArgs),
-  }),
-  calendar_events: createActionRouter<CalendarToolArgs>('calendar_events', {
-    read: (calendarArgs) => handleReadCalendarEvents(calendarArgs),
-    create: (calendarArgs) => handleCreateCalendarEvent(calendarArgs),
-    update: (calendarArgs) => handleUpdateCalendarEvent(calendarArgs),
-    delete: (calendarArgs) => handleDeleteCalendarEvent(calendarArgs),
-  }),
-  calendar_calendars: async (args?: ToolArgs) =>
-    handleReadCalendars(args as CalendarsToolArgs | undefined),
+  [TOOL_NAMES.REMINDERS_TASKS]: createActionRouter<RemindersToolArgs>(
+    TOOL_NAMES.REMINDERS_TASKS,
+    {
+      read: (reminderArgs) => handleReadReminders(reminderArgs),
+      create: (reminderArgs) => handleCreateReminder(reminderArgs),
+      update: (reminderArgs) => handleUpdateReminder(reminderArgs),
+      delete: (reminderArgs) => handleDeleteReminder(reminderArgs),
+    },
+  ),
+  [TOOL_NAMES.REMINDERS_LISTS]: createActionRouter<ListsToolArgs>(
+    TOOL_NAMES.REMINDERS_LISTS,
+    {
+      read: async (_listArgs) => handleReadReminderLists(),
+      create: (listArgs) => handleCreateReminderList(listArgs),
+      update: (listArgs) => handleUpdateReminderList(listArgs),
+      delete: (listArgs) => handleDeleteReminderList(listArgs),
+    },
+  ),
+  [TOOL_NAMES.CALENDAR_EVENTS]: createActionRouter<CalendarToolArgs>(
+    TOOL_NAMES.CALENDAR_EVENTS,
+    {
+      read: (calendarArgs) => handleReadCalendarEvents(calendarArgs),
+      create: (calendarArgs) => handleCreateCalendarEvent(calendarArgs),
+      update: (calendarArgs) => handleUpdateCalendarEvent(calendarArgs),
+      delete: (calendarArgs) => handleDeleteCalendarEvent(calendarArgs),
+    },
+  ),
+  [TOOL_NAMES.CALENDAR_CALENDARS]: async (args?: ToolArgs) =>
+    handleReadCalendars(args),
 } satisfies Record<ToolName, ToolRouter>;
 
 const isManagedToolName = (value: string): value is ToolName =>

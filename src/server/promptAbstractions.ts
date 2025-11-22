@@ -5,6 +5,8 @@
  * Provides consistent behavior for action execution based on confidence thresholds
  */
 
+import type { TOOLS } from '../utils/constants.js';
+
 /**
  * Confidence level thresholds for action execution
  */
@@ -35,11 +37,7 @@ export const getConfidenceLevel = (percentage: number): ConfidenceLevel => {
  * Standard tool call format
  */
 export interface ToolCall {
-  tool:
-    | 'reminders_tasks'
-    | 'reminders_lists'
-    | 'calendar_events'
-    | 'calendar_calendars';
+  tool: (typeof TOOLS)[keyof typeof TOOLS];
   args: Record<string, unknown>;
 }
 
