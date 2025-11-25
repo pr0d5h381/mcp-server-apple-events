@@ -57,14 +57,6 @@ export function nullToUndefined<T>(obj: T, fields: (keyof T)[]): T {
  */
 
 /**
- * Escape special regex characters in a string
- * Used for safely constructing regex patterns from user input
- */
-export function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/**
  * Formats multiline notes for markdown display by indenting continuation lines
  * Replaces newlines with newline + indentation to maintain proper formatting
  */

@@ -1,189 +1,173 @@
 /**
  * notesFormatter.ts
- * Standardized formatting utilities for reminder notes to ensure consistency
- * and correct format for related reminder references.
+ * Natural language formatting utilities for reminder notes
  */
 
-import { escapeRegex } from './helpers.js';
-import {
-  formatRelatedReminders,
-  type RelatedReminder,
-} from './reminderLinks.js';
-
 /**
- * Standardized note structure components
+ * Note structure components
  */
 export interface NoteComponents {
-  /** Critical information that blocks task completion */
-  criticalInfo?: {
-    reason: string;
-    details: string;
-  };
-  /** Original note content */
-  originalContent?: string;
-  /** Related reminders with relationship context */
-  relatedReminders?: RelatedReminder[];
+  /** Main note content */
+  content?: string;
+  /** Critical/blocking information */
+  critical?: string;
+  /** Related reminder IDs */
+  links?: string[];
 }
 
 /**
- * Format a standardized reminder note with proper structure:
- * 1. CRITICAL information (if any) at the beginning
- * 2. Original content in the middle
- * 3. Related reminders section at the end
+ * Format notes as natural text paragraphs:
+ *
+ * Main content here.
+ *
+ * Critical:
+ * reason here
+ *
+ * Related:
+ * ID1, ID2
  */
-export function formatStandardizedNotes(components: NoteComponents): string {
+export function formatNotes(components: NoteComponents): string {
   const parts: string[] = [];
 
-  // Add CRITICAL information first
-  if (components.criticalInfo) {
-    const { reason, details } = components.criticalInfo;
-    parts.push(`CRITICAL: ${reason} - ${details}`);
+  if (components.content) {
+    parts.push(components.content);
   }
 
-  // Add original content
-  if (components.originalContent) {
-    if (parts.length > 0) {
-      parts.push(''); // Add separator after CRITICAL
-    }
-    parts.push(components.originalContent);
+  if (components.critical) {
+    parts.push(`Critical:\n${components.critical}`);
   }
 
-  // Add related reminders at the end
-  if (components.relatedReminders && components.relatedReminders.length > 0) {
-    const relatedSection = formatRelatedReminders(components.relatedReminders);
-    parts.push(relatedSection);
+  if (components.links?.length) {
+    parts.push(`Related:\n${components.links.join(', ')}`);
   }
 
-  return parts.join('\n').trim();
+  return parts.join('\n\n').trim();
 }
 
 /**
- * Parse existing notes to extract structured components
+ * Parse natural notes format
  */
-export function parseNoteComponents(notes?: string): NoteComponents {
-  if (!notes) {
-    return {};
-  }
+export function parseNotes(notes?: string): NoteComponents {
+  if (!notes) return {};
 
   const components: NoteComponents = {};
-  const criticalMatch = notes.match(
-    /^CRITICAL:\s*(.+?)\s*-\s*(.+?)(?:\n\n|\nRelated reminders:|$)/s,
-  );
+  const lines = notes.split('\n');
+  const contentLines: string[] = [];
 
-  if (criticalMatch) {
-    components.criticalInfo = {
-      reason: criticalMatch[1].trim(),
-      details: criticalMatch[2].trim(),
-    };
+  let currentSection: 'content' | 'critical' | 'related' = 'content';
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (trimmed === 'Critical:') {
+      currentSection = 'critical';
+      continue;
+    }
+
+    if (trimmed === 'Related:') {
+      currentSection = 'related';
+      continue;
+    }
+
+    if (!trimmed) continue;
+
+    switch (currentSection) {
+      case 'critical':
+        components.critical = trimmed;
+        currentSection = 'content'; // Reset after capturing
+        break;
+      case 'related':
+        components.links = trimmed
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean);
+        currentSection = 'content'; // Reset after capturing
+        break;
+      default:
+        contentLines.push(trimmed);
+    }
   }
 
-  const relatedMatch = notes.match(/Related reminders:([\s\S]*)$/);
-  let originalContent = notes;
-
-  if (relatedMatch) {
-    components.relatedReminders = parseRelatedRemindersFromText(
-      relatedMatch[1],
-    );
-    originalContent = notes.replace(/Related reminders:[\s\S]*$/, '');
-  }
-
-  if (criticalMatch) {
-    const criticalLine = `CRITICAL: ${criticalMatch[1].trim()} - ${criticalMatch[2].trim()}`;
-    originalContent = originalContent.replace(
-      new RegExp(
-        `^${escapeRegex(criticalLine)}(?:\\n\\n|\\n(?=\\n)|\\nRelated reminders:|$)`,
-        's',
-      ),
-      '',
-    );
-  }
-
-  originalContent = originalContent.trim();
-  if (originalContent) {
-    components.originalContent = originalContent;
+  if (contentLines.length > 0) {
+    components.content = contentLines.join('\n');
   }
 
   return components;
 }
 
-const RELATIONSHIP_LABELS: Record<string, RelatedReminder['relationship']> = {
-  'Dependencies:': 'dependency',
-  'Follow-up tasks:': 'follow-up',
-  'Related reminders:': 'related',
-  'Blocked by:': 'blocked-by',
-  'Prerequisites:': 'prerequisite',
-};
-
 /**
- * Parse related reminders from formatted text
- * Extracts reminder IDs and titles from reference format: [Title] (ID: {id}) (List)
+ * Merge notes: updates override existing values, links are combined
  */
-function parseRelatedRemindersFromText(text: string): RelatedReminder[] {
-  const reminders: RelatedReminder[] = [];
-  const lines = text.split('\n');
-  let currentRelationship: RelatedReminder['relationship'] | null = null;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-
-    for (const [label, relationship] of Object.entries(RELATIONSHIP_LABELS)) {
-      if (trimmed.startsWith(label)) {
-        currentRelationship = relationship;
-        break;
-      }
-    }
-
-    if (!currentRelationship) continue;
-
-    const referenceMatch = trimmed.match(
-      /^-\s*\[(.+?)\]\s*\(ID:\s*([^)]+)\)(?:\s*\((.+?)\))?$/,
-    );
-    if (referenceMatch) {
-      reminders.push({
-        id: referenceMatch[2].trim(),
-        title: referenceMatch[1],
-        list: referenceMatch[3],
-        relationship: currentRelationship,
-      });
-    }
-  }
-
-  return reminders;
-}
-
-/**
- * Merge note components intelligently
- * Preserves existing structure while adding new components
- */
-export function mergeNoteComponents(
+export function mergeNotes(
   existing: NoteComponents,
   updates: Partial<NoteComponents>,
 ): NoteComponents {
-  const merged: NoteComponents = {
-    criticalInfo: updates.criticalInfo || existing.criticalInfo,
-  };
+  const merged: NoteComponents = {};
 
-  if (updates.originalContent && existing.originalContent) {
-    merged.originalContent = `${existing.originalContent}\n\n${updates.originalContent}`;
+  // Content: append if both exist
+  if (updates.content && existing.content) {
+    merged.content = `${existing.content}\n\n${updates.content}`;
   } else {
-    merged.originalContent =
-      updates.originalContent || existing.originalContent;
+    merged.content = updates.content ?? existing.content;
   }
 
-  const allRelated = [
-    ...(existing.relatedReminders || []),
-    ...(updates.relatedReminders || []),
-  ];
+  // Critical: new overrides old
+  merged.critical = updates.critical ?? existing.critical;
 
-  if (allRelated.length > 0) {
-    const seen = new Set<string>();
-    merged.relatedReminders = allRelated.filter((r) => {
-      if (seen.has(r.id)) return false;
-      seen.add(r.id);
-      return true;
-    });
+  // Links: combine and deduplicate
+  const allLinks = [...(existing.links ?? []), ...(updates.links ?? [])];
+  if (allLinks.length > 0) {
+    merged.links = [...new Set(allLinks)];
   }
 
   return merged;
 }
+
+/**
+ * Add a link to existing notes
+ */
+export function addLink(notes: string | undefined, linkId: string): string {
+  const components = parseNotes(notes);
+  components.links = [...new Set([...(components.links ?? []), linkId])];
+  return formatNotes(components);
+}
+
+/**
+ * Set critical info on existing notes
+ */
+export function setCritical(
+  notes: string | undefined,
+  critical: string,
+): string {
+  const components = parseNotes(notes);
+  components.critical = critical;
+  return formatNotes(components);
+}
+
+/**
+ * Remove critical info from notes
+ */
+export function clearCritical(notes: string | undefined): string {
+  const components = parseNotes(notes);
+  delete components.critical;
+  return formatNotes(components);
+}
+
+/**
+ * Remove a link from notes
+ */
+export function removeLink(notes: string | undefined, linkId: string): string {
+  const components = parseNotes(notes);
+  components.links = components.links?.filter((id) => id !== linkId);
+  if (components.links?.length === 0) {
+    delete components.links;
+  }
+  return formatNotes(components);
+}
+
+// Legacy exports for backwards compatibility
+export {
+  formatNotes as formatStandardizedNotes,
+  parseNotes as parseNoteComponents,
+  mergeNotes as mergeNoteComponents,
+};

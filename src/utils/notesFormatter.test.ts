@@ -1,228 +1,273 @@
 /**
  * notesFormatter.test.ts
- * Tests for standardized note formatting utilities
+ * Tests for natural language note formatting utilities
  */
 
 import {
-  formatStandardizedNotes,
-  mergeNoteComponents,
+  addLink,
+  clearCritical,
+  formatNotes,
+  mergeNotes,
   type NoteComponents,
-  parseNoteComponents,
+  parseNotes,
+  removeLink,
+  setCritical,
 } from './notesFormatter.js';
 
-describe('notesFormatter', () => {
-  describe('formatStandardizedNotes', () => {
-    it('should format notes with all components', () => {
-      const components: NoteComponents = {
-        criticalInfo: {
-          reason: 'Blocked by',
-          details: 'Need approval from manager',
-        },
-        originalContent: 'Complete the quarterly report',
-        relatedReminders: [
-          {
-            id: 'rem-123',
-            title: 'Get manager approval',
-            list: 'Work',
-            relationship: 'dependency',
-          },
-        ],
-      };
+describe('formatNotes', () => {
+  it('should format all components as paragraphs', () => {
+    const components: NoteComponents = {
+      content: 'Check security issues',
+      critical: 'Blocking release',
+      links: ['ABC123', 'DEF456'],
+    };
 
-      const formatted = formatStandardizedNotes(components);
-      expect(formatted).toContain(
-        'CRITICAL: Blocked by - Need approval from manager',
-      );
-      expect(formatted).toContain('Complete the quarterly report');
-      expect(formatted).toContain('Related reminders:');
-      expect(formatted).toContain(
-        '[Get manager approval] (ID: rem-123) (Work)',
-      );
-    });
-
-    it('should format notes with only critical info', () => {
-      const components: NoteComponents = {
-        criticalInfo: {
-          reason: 'Missing resources',
-          details: 'Need access to database',
-        },
-      };
-
-      const formatted = formatStandardizedNotes(components);
-      expect(formatted).toBe(
-        'CRITICAL: Missing resources - Need access to database',
-      );
-    });
-
-    it('should format notes with only original content', () => {
-      const components: NoteComponents = {
-        originalContent: 'Buy groceries',
-      };
-
-      const formatted = formatStandardizedNotes(components);
-      expect(formatted).toBe('Buy groceries');
-    });
-
-    it('should format notes with only related reminders', () => {
-      const components: NoteComponents = {
-        relatedReminders: [
-          {
-            id: 'rem-123',
-            title: 'Task 1',
-            relationship: 'related',
-          },
-          {
-            id: 'rem-456',
-            title: 'Task 2',
-            list: 'Personal',
-            relationship: 'follow-up',
-          },
-        ],
-      };
-
-      const formatted = formatStandardizedNotes(components);
-      expect(formatted).toContain('Related reminders:');
-      expect(formatted).toContain('[Task 1] (ID: rem-123)');
-      expect(formatted).toContain('[Task 2] (ID: rem-456) (Personal)');
-    });
-
-    it('should handle empty components', () => {
-      const formatted = formatStandardizedNotes({});
-      expect(formatted).toBe('');
-    });
+    const result = formatNotes(components);
+    expect(result).toBe(
+      'Check security issues\n\nCritical:\nBlocking release\n\nRelated:\nABC123, DEF456',
+    );
   });
 
-  describe('parseNoteComponents', () => {
-    it('should parse notes with all components', () => {
-      const notes = `CRITICAL: Blocked by - Need approval from manager
-
-Complete the quarterly report
-
-Related reminders:
-Dependencies:
-- [Get manager approval] (ID: rem-123) (Work)`;
-
-      const parsed = parseNoteComponents(notes);
-      expect(parsed.criticalInfo).toEqual({
-        reason: 'Blocked by',
-        details: 'Need approval from manager',
-      });
-      expect(parsed.originalContent).toBe('Complete the quarterly report');
-      expect(parsed.relatedReminders).toHaveLength(1);
-      expect(parsed.relatedReminders?.[0]).toEqual({
-        id: 'rem-123',
-        title: 'Get manager approval',
-        list: 'Work',
-        relationship: 'dependency',
-      });
-    });
-
-    it('should parse notes with only critical info', () => {
-      const notes = 'CRITICAL: Missing resources - Need access to database';
-      const parsed = parseNoteComponents(notes);
-      expect(parsed.criticalInfo).toEqual({
-        reason: 'Missing resources',
-        details: 'Need access to database',
-      });
-      expect(parsed.originalContent).toBeUndefined();
-    });
-
-    it('should parse notes with only original content', () => {
-      const notes = 'Buy groceries';
-      const parsed = parseNoteComponents(notes);
-      expect(parsed.originalContent).toBe('Buy groceries');
-      expect(parsed.criticalInfo).toBeUndefined();
-    });
-
-    it('should handle empty notes', () => {
-      const parsed = parseNoteComponents(undefined);
-      expect(parsed).toEqual({});
-    });
+  it('should format content only', () => {
+    expect(formatNotes({ content: 'Simple note' })).toBe('Simple note');
   });
 
-  describe('mergeNoteComponents', () => {
-    it('should merge components intelligently', () => {
-      const existing: NoteComponents = {
-        originalContent: 'Original note',
-        relatedReminders: [
-          {
-            id: 'rem-1',
-            title: 'Existing reminder',
-            relationship: 'related',
-          },
-        ],
-      };
+  it('should format critical only', () => {
+    expect(formatNotes({ critical: 'Urgent task' })).toBe(
+      'Critical:\nUrgent task',
+    );
+  });
 
-      const updates: Partial<NoteComponents> = {
-        criticalInfo: {
-          reason: 'Blocked by',
-          details: 'Need approval',
-        },
-        relatedReminders: [
-          {
-            id: 'rem-2',
-            title: 'New reminder',
-            relationship: 'dependency',
-          },
-        ],
-      };
+  it('should format links only', () => {
+    expect(formatNotes({ links: ['ID1', 'ID2'] })).toBe('Related:\nID1, ID2');
+  });
 
-      const merged = mergeNoteComponents(existing, updates);
-      expect(merged.criticalInfo).toEqual(updates.criticalInfo);
-      expect(merged.originalContent).toBe('Original note');
-      expect(merged.relatedReminders).toHaveLength(2);
-      expect(merged.relatedReminders?.map((r) => r.id)).toEqual([
-        'rem-1',
-        'rem-2',
-      ]);
-    });
+  it('should return empty string for empty components', () => {
+    expect(formatNotes({})).toBe('');
+  });
 
-    it('should merge originalContent when both exist', () => {
-      const existing: NoteComponents = {
-        originalContent: 'Existing note content',
-      };
+  it('should format content with critical', () => {
+    const components: NoteComponents = {
+      content: 'Review the PR',
+      critical: 'Deadline today',
+    };
 
-      const updates: Partial<NoteComponents> = {
-        originalContent: 'Additional note content',
-      };
+    expect(formatNotes(components)).toBe(
+      'Review the PR\n\nCritical:\nDeadline today',
+    );
+  });
 
-      const merged = mergeNoteComponents(existing, updates);
-      expect(merged.originalContent).toBe(
-        'Existing note content\n\nAdditional note content',
-      );
-    });
+  it('should format content with links', () => {
+    const components: NoteComponents = {
+      content: 'Main task',
+      links: ['REF1'],
+    };
 
-    it('should deduplicate related reminders by ID', () => {
-      const existing: NoteComponents = {
-        relatedReminders: [
-          {
-            id: 'rem-1',
-            title: 'Task 1',
-            relationship: 'related',
-          },
-        ],
-      };
+    expect(formatNotes(components)).toBe('Main task\n\nRelated:\nREF1');
+  });
+});
 
-      const updates: Partial<NoteComponents> = {
-        relatedReminders: [
-          {
-            id: 'rem-1',
-            title: 'Task 1 Updated',
-            relationship: 'dependency',
-          },
-          {
-            id: 'rem-2',
-            title: 'Task 2',
-            relationship: 'follow-up',
-          },
-        ],
-      };
+describe('parseNotes', () => {
+  it('should parse all components', () => {
+    const notes =
+      'Main content here\n\nCritical:\nBlocking issue\n\nRelated:\nABC, DEF';
+    const result = parseNotes(notes);
 
-      const merged = mergeNoteComponents(existing, updates);
-      expect(merged.relatedReminders).toHaveLength(2);
-      // First occurrence should be kept
-      expect(merged.relatedReminders?.[0].id).toBe('rem-1');
-      expect(merged.relatedReminders?.[0].title).toBe('Task 1');
-    });
+    expect(result.content).toBe('Main content here');
+    expect(result.critical).toBe('Blocking issue');
+    expect(result.links).toEqual(['ABC', 'DEF']);
+  });
+
+  it('should parse content only', () => {
+    const notes = 'Just a simple note';
+    const result = parseNotes(notes);
+
+    expect(result.content).toBe('Just a simple note');
+    expect(result.critical).toBeUndefined();
+    expect(result.links).toBeUndefined();
+  });
+
+  it('should parse multiline content', () => {
+    const notes = 'Line 1\nLine 2\nLine 3';
+    const result = parseNotes(notes);
+
+    expect(result.content).toBe('Line 1\nLine 2\nLine 3');
+  });
+
+  it('should return empty object for undefined', () => {
+    expect(parseNotes(undefined)).toEqual({});
+  });
+
+  it('should return empty object for empty string', () => {
+    expect(parseNotes('')).toEqual({});
+  });
+
+  it('should handle whitespace in links', () => {
+    const notes = 'Related:\nABC , DEF , GHI';
+    const result = parseNotes(notes);
+
+    expect(result.links).toEqual(['ABC', 'DEF', 'GHI']);
+  });
+
+  it('should parse critical without content', () => {
+    const notes = 'Critical:\nImportant deadline';
+    const result = parseNotes(notes);
+
+    expect(result.content).toBeUndefined();
+    expect(result.critical).toBe('Important deadline');
+  });
+
+  it('should handle content after critical', () => {
+    const notes = 'Critical:\nUrgent\n\nSome content after';
+    const result = parseNotes(notes);
+
+    expect(result.critical).toBe('Urgent');
+    expect(result.content).toBe('Some content after');
+  });
+});
+
+describe('mergeNotes', () => {
+  it('should override critical with update', () => {
+    const existing: NoteComponents = { critical: 'Old' };
+    const updates: Partial<NoteComponents> = { critical: 'New' };
+
+    const result = mergeNotes(existing, updates);
+    expect(result.critical).toBe('New');
+  });
+
+  it('should keep existing critical if no update', () => {
+    const existing: NoteComponents = { critical: 'Existing' };
+    const updates: Partial<NoteComponents> = { content: 'New content' };
+
+    const result = mergeNotes(existing, updates);
+    expect(result.critical).toBe('Existing');
+  });
+
+  it('should append content with double newline', () => {
+    const existing: NoteComponents = { content: 'First part' };
+    const updates: Partial<NoteComponents> = { content: 'Second part' };
+
+    const result = mergeNotes(existing, updates);
+    expect(result.content).toBe('First part\n\nSecond part');
+  });
+
+  it('should deduplicate links', () => {
+    const existing: NoteComponents = { links: ['A', 'B'] };
+    const updates: Partial<NoteComponents> = { links: ['B', 'C'] };
+
+    const result = mergeNotes(existing, updates);
+    expect(result.links).toEqual(['A', 'B', 'C']);
+  });
+
+  it('should handle empty existing', () => {
+    const updates: Partial<NoteComponents> = {
+      content: 'Content',
+      critical: 'Critical',
+      links: ['A'],
+    };
+
+    const result = mergeNotes({}, updates);
+    expect(result).toEqual(updates);
+  });
+});
+
+describe('addLink', () => {
+  it('should add link to empty notes', () => {
+    const result = addLink(undefined, 'ABC123');
+    expect(result).toBe('Related:\nABC123');
+  });
+
+  it('should add link to existing notes', () => {
+    const result = addLink('Some content', 'ABC123');
+    expect(result).toBe('Some content\n\nRelated:\nABC123');
+  });
+
+  it('should add link to notes with existing links', () => {
+    const result = addLink('Related:\nDEF456', 'ABC123');
+    expect(result).toBe('Related:\nDEF456, ABC123');
+  });
+
+  it('should not duplicate existing link', () => {
+    const result = addLink('Related:\nABC123', 'ABC123');
+    expect(result).toBe('Related:\nABC123');
+  });
+});
+
+describe('setCritical', () => {
+  it('should set critical on empty notes', () => {
+    const result = setCritical(undefined, 'Urgent');
+    expect(result).toBe('Critical:\nUrgent');
+  });
+
+  it('should set critical on existing notes', () => {
+    const result = setCritical('Some content', 'Urgent');
+    expect(result).toBe('Some content\n\nCritical:\nUrgent');
+  });
+
+  it('should override existing critical', () => {
+    const result = setCritical('Critical:\nOld\n\nContent', 'New');
+    expect(result).toBe('Content\n\nCritical:\nNew');
+  });
+});
+
+describe('clearCritical', () => {
+  it('should remove critical from notes', () => {
+    const result = clearCritical('Content\n\nCritical:\nRemove this');
+    expect(result).toBe('Content');
+  });
+
+  it('should handle notes without critical', () => {
+    const result = clearCritical('Just content');
+    expect(result).toBe('Just content');
+  });
+
+  it('should handle undefined notes', () => {
+    const result = clearCritical(undefined);
+    expect(result).toBe('');
+  });
+});
+
+describe('removeLink', () => {
+  it('should remove specific link', () => {
+    const result = removeLink('Related:\nABC, DEF, GHI', 'DEF');
+    expect(result).toBe('Related:\nABC, GHI');
+  });
+
+  it('should remove Related section when last link removed', () => {
+    const result = removeLink('Content\n\nRelated:\nABC', 'ABC');
+    expect(result).toBe('Content');
+  });
+
+  it('should handle non-existent link', () => {
+    const result = removeLink('Related:\nABC', 'XYZ');
+    expect(result).toBe('Related:\nABC');
+  });
+});
+
+describe('roundtrip', () => {
+  it('should preserve data through format -> parse cycle', () => {
+    const original: NoteComponents = {
+      content: 'Task details here',
+      critical: 'Must complete today',
+      links: ['ID1', 'ID2'],
+    };
+
+    const formatted = formatNotes(original);
+    const parsed = parseNotes(formatted);
+
+    expect(parsed).toEqual(original);
+  });
+
+  it('should handle multiline content', () => {
+    const original: NoteComponents = {
+      content: 'First line.\nSecond line.',
+      links: ['REF1'],
+    };
+
+    const formatted = formatNotes(original);
+    const parsed = parseNotes(formatted);
+
+    expect(parsed.content).toBe(original.content);
+    expect(parsed.links).toEqual(original.links);
   });
 });
