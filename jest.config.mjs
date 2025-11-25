@@ -36,6 +36,7 @@ export default {
     '!src/**/*.spec.ts',
     '!src/**/*.d.ts',
     '!src/**/__mocks__/**',
+    '!src/**/__fixtures__/**',
     '!src/utils/projectUtils.ts', // Excluded: import.meta.url line cannot be tested in Jest
   ],
   coveragePathIgnorePatterns: ['/node_modules/', '/dist/'],
