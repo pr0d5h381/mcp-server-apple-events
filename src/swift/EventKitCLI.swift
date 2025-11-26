@@ -432,9 +432,18 @@ class RemindersManager {
                 throw NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid end date format."])
             }
             event.endDate = endDate
-            // If timezone not set from startDate, use endDate timezone
-            if event.timeZone == nil, let endComponents = parseDateComponents(from: endStr) {
-                event.timeZone = endComponents.timeZone
+            
+            // Handle end date timezone - EventKit only supports one timezone per event
+            if let endComponents = parseDateComponents(from: endStr), let endTz = endComponents.timeZone {
+                if let existingTz = event.timeZone {
+                    // If start date was provided in this update with a different timezone, reject the conflicting timezones
+                    if startDateString != nil && existingTz.identifier != endTz.identifier {
+                        throw NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "Event start and end dates have different timezones (\(existingTz.identifier) vs \(endTz.identifier)). EventKit events support only one timezone per event. Please use the same timezone for both dates."])
+                    }
+                } else {
+                    // If timezone not set from startDate, use endDate timezone
+                    event.timeZone = endTz
+                }
             }
         }
         
