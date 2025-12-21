@@ -56,7 +56,6 @@ export function validateBinaryPath(
   }
 
   const normalizedPath = path.normalize(binaryPath);
-  // istanbul ignore next - Defensive check that cannot be triggered through path.normalize()
   if (normalizedPath.includes('..')) {
     throw new BinaryValidationError(
       'Path traversal detected in binary path',
