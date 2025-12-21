@@ -1,8 +1,6 @@
 /**
- * @fileoverview Main tool definitions and handler functions
- * @module tools/index
- * @description Routes MCP tool calls to appropriate handlers for reminders, lists, and calendar operations
- * Provides centralized tool call handling with consistent error management
+ * tools/index.ts
+ * Tool routing: normalizes names, dispatches to handlers
  */
 
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -29,20 +27,6 @@ import {
   handleUpdateReminder,
   handleUpdateReminderList,
 } from './handlers/index.js';
-
-/**
- * Routes tool calls to the appropriate handler based on the tool name
- * @param {string} name - Name of the tool to call (e.g., 'reminders_tasks', 'calendar_events')
- * @param {ToolArgs} args - Arguments for the tool call
- * @returns {Promise<CallToolResult>} Result of the tool call with formatted output
- * @throws {Error} If tool name is unknown or handler execution fails
- * @description
- * Supports both canonical names ('reminders_tasks') and dot notation ('reminders.tasks')
- * Routes to specific handlers for reminders, lists, and calendar operations
- * @example
- * await handleToolCall('reminders_tasks', { action: 'create', title: 'New task' });
- * await handleToolCall('calendar.events', { action: 'read', search: 'meeting' });
- */
 const TOOL_ALIASES: Record<string, string> = TOOL_NAMES.ALIASES;
 
 function normalizeToolName(name: string): string {
@@ -76,8 +60,6 @@ const createActionRouter = <TArgs extends { action: string }>(
       return createErrorResponse('No arguments provided');
     }
 
-    // Type assertion is necessary here due to union type narrowing limitations
-    // The router map ensures type safety at the configuration level
     const typedArgs = args as TArgs;
     const action = typedArgs.action;
 
@@ -121,7 +103,6 @@ const TOOL_ROUTER_MAP = {
     },
   ),
   [TOOL_NAMES.CALENDAR_CALENDARS]: async (args?: ToolArgs) => {
-    // Type narrowing: calendar_calendars only accepts CalendarsToolArgs
     return handleReadCalendars(args as CalendarsToolArgs | undefined);
   },
 } satisfies Record<ToolName, ToolRouter>;
