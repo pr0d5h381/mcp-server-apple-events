@@ -378,7 +378,6 @@ class RemindersManager {
             throw NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid date format. Use 'YYYY-MM-DD HH:mm:ss' or ISO 8601 format."])
         }
         
-        // Extract timezone from start date components (events typically use same timezone for start and end)
         if let startComponents = parseDateComponents(from: startDateString) {
             event.timeZone = startComponents.timeZone
         }
