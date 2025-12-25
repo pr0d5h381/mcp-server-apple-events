@@ -122,6 +122,30 @@ describe('permissionPrompt', () => {
       await triggerPermissionPrompt('reminders');
       expect(mockExecFile).toHaveBeenCalledTimes(1);
     });
+
+    it('forces prompt when force=true even if already prompted', async () => {
+      mockExecFile.mockImplementation(((
+        _command: string,
+        _args: readonly string[] | null | undefined,
+        callback?: ExecFileCallback,
+      ) => {
+        callback?.(null, '', '');
+        return {} as ChildProcess;
+      }) as unknown as typeof execFile);
+
+      // First call: normal prompt
+      await triggerPermissionPrompt('reminders');
+      expect(mockExecFile).toHaveBeenCalledTimes(1);
+      expect(hasBeenPrompted('reminders')).toBe(true);
+
+      // Second call without force: should be skipped
+      await triggerPermissionPrompt('reminders');
+      expect(mockExecFile).toHaveBeenCalledTimes(1);
+
+      // Third call with force: should execute despite being already prompted
+      await triggerPermissionPrompt('reminders', true);
+      expect(mockExecFile).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('hasBeenPrompted', () => {

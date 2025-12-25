@@ -24,11 +24,15 @@ const promptedDomains = new Set<PermissionDomain>();
  * This function is designed to be called proactively before the first Swift CLI call
  * to ensure permission dialogs appear even in non-interactive contexts where the
  * Swift binary's native EventKit permission request may be suppressed.
+ *
+ * @param domain - The permission domain to prompt for
+ * @param force - If true, bypasses the memoization check and forces the prompt even if already prompted
  */
 export async function triggerPermissionPrompt(
   domain: PermissionDomain,
+  force = false,
 ): Promise<void> {
-  if (promptedDomains.has(domain)) {
+  if (!force && promptedDomains.has(domain)) {
     return;
   }
 

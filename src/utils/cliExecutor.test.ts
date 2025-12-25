@@ -254,8 +254,6 @@ describe('cliExecutor', () => {
       await expect(executeCli(['--action', 'read'])).rejects.toThrow(
         'Reminder permission denied.',
       );
-      // Proactive prompt is called once, then retry prompt is called once
-      // Total: 2 calls to triggerPermissionPrompt
       expect(mockTriggerPermissionPrompt).toHaveBeenCalledTimes(2);
       expect(mockTriggerPermissionPrompt).toHaveBeenNthCalledWith(
         1,
@@ -264,8 +262,8 @@ describe('cliExecutor', () => {
       expect(mockTriggerPermissionPrompt).toHaveBeenNthCalledWith(
         2,
         'reminders',
+        true,
       );
-      // CLI is called twice: once after proactive prompt, once after retry prompt
       expect(mockExecFile).toHaveBeenCalledTimes(2);
     });
 
@@ -293,8 +291,6 @@ describe('cliExecutor', () => {
         'Calendar permission denied.',
       );
 
-      // Proactive prompt for calendars is called once, then retry prompt is called once
-      // Total: 2 calls to triggerPermissionPrompt
       expect(mockTriggerPermissionPrompt).toHaveBeenCalledTimes(2);
       expect(mockTriggerPermissionPrompt).toHaveBeenNthCalledWith(
         1,
@@ -303,8 +299,8 @@ describe('cliExecutor', () => {
       expect(mockTriggerPermissionPrompt).toHaveBeenNthCalledWith(
         2,
         'calendars',
+        true,
       );
-      // CLI is called twice: once after proactive prompt, once after retry prompt
       expect(mockExecFile).toHaveBeenCalledTimes(2);
     });
 
@@ -460,7 +456,16 @@ describe('cliExecutor', () => {
       const result = await executeCli(['--action', 'read']);
 
       expect(mockExecFile).toHaveBeenCalledTimes(2);
-      expect(mockTriggerPermissionPrompt).toHaveBeenCalledWith('reminders');
+      expect(mockTriggerPermissionPrompt).toHaveBeenCalledTimes(2);
+      expect(mockTriggerPermissionPrompt).toHaveBeenNthCalledWith(
+        1,
+        'reminders',
+      );
+      expect(mockTriggerPermissionPrompt).toHaveBeenNthCalledWith(
+        2,
+        'reminders',
+        true,
+      );
       expect(result).toEqual({ reminders: [] });
     });
 
@@ -496,7 +501,16 @@ describe('cliExecutor', () => {
       const result = await executeCli(['--action', 'read-events']);
 
       expect(mockExecFile).toHaveBeenCalledTimes(2);
-      expect(mockTriggerPermissionPrompt).toHaveBeenCalledWith('calendars');
+      expect(mockTriggerPermissionPrompt).toHaveBeenCalledTimes(2);
+      expect(mockTriggerPermissionPrompt).toHaveBeenNthCalledWith(
+        1,
+        'calendars',
+      );
+      expect(mockTriggerPermissionPrompt).toHaveBeenNthCalledWith(
+        2,
+        'calendars',
+        true,
+      );
       expect(result).toEqual({ events: [] });
     });
 
@@ -521,10 +535,17 @@ describe('cliExecutor', () => {
         'Reminder permission denied.',
       );
 
-      // Should call CLI twice (initial + retry) but not more
       expect(mockExecFile).toHaveBeenCalledTimes(2);
-      // Proactive prompt is called once, then retry prompt is called once
       expect(mockTriggerPermissionPrompt).toHaveBeenCalledTimes(2);
+      expect(mockTriggerPermissionPrompt).toHaveBeenNthCalledWith(
+        1,
+        'reminders',
+      );
+      expect(mockTriggerPermissionPrompt).toHaveBeenNthCalledWith(
+        2,
+        'reminders',
+        true,
+      );
     });
 
     it('does not trigger permission prompt for non-permission errors', async () => {

@@ -234,7 +234,7 @@ export async function executeCli<T>(args: string[]): Promise<T> {
       // On permission error, trigger AppleScript prompt and retry once
       if (!hasRetried && error instanceof CliPermissionError) {
         hasRetried = true;
-        await triggerPermissionPrompt(error.domain);
+        await triggerPermissionPrompt(error.domain, true);
         continue;
       }
       throw error;
