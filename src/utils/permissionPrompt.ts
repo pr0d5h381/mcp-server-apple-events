@@ -25,10 +25,7 @@ export async function triggerPermissionPrompt(
   force = false,
 ): Promise<void> {
   if (!force && promptPromises.has(domain)) {
-    const existingPromise = promptPromises.get(domain);
-    if (existingPromise) {
-      return existingPromise;
-    }
+    return promptPromises.get(domain)!;
   }
 
   const promise = (async () => {

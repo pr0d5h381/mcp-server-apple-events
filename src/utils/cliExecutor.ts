@@ -225,19 +225,14 @@ export async function executeCli<T>(args: string[]): Promise<T> {
     await triggerPermissionPrompt(domain);
   }
 
-  let hasRetried = false;
-
-  while (true) {
-    try {
+  try {
+    return await runCli<T>(cliPath, args);
+  } catch (error) {
+    // On permission error, trigger AppleScript prompt and retry once
+    if (error instanceof CliPermissionError) {
+      await triggerPermissionPrompt(error.domain, true);
       return await runCli<T>(cliPath, args);
-    } catch (error) {
-      // On permission error, trigger AppleScript prompt and retry once
-      if (!hasRetried && error instanceof CliPermissionError) {
-        hasRetried = true;
-        await triggerPermissionPrompt(error.domain, true);
-        continue;
-      }
-      throw error;
     }
+    throw error;
   }
 }
