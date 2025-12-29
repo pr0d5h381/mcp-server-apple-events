@@ -8,7 +8,7 @@ struct ErrorOutput: Codable { let status = "error"; let message: String }
 struct ReadResult: Codable { let lists: [ListJSON]; let reminders: [ReminderJSON] }
 struct DeleteResult: Codable { let id: String; let deleted = true }
 struct DeleteListResult: Codable { let title: String; let deleted = true }
-struct ReminderJSON: Codable { let id: String, title: String, isCompleted: Bool, list: String, notes: String?, url: String?, dueDate: String? }
+struct ReminderJSON: Codable { let id: String, title: String, isCompleted: Bool, list: String, notes: String?, url: String?, dueDate: String?, priority: Int }
 struct ListJSON: Codable { let id: String, title: String }
 struct EventJSON: Codable { let id: String, title: String, calendar: String, startDate: String, endDate: String, notes: String?, location: String?, url: String?, isAllDay: Bool }
 struct CalendarJSON: Codable { let id: String, title: String }
@@ -232,11 +232,11 @@ class RemindersManager {
         return filtered.map { $0.toJSON() }
     }
 
-    func createReminder(title: String, listName: String?, notes: String?, urlString: String?, dueDateString: String?) throws -> ReminderJSON {
+    func createReminder(title: String, listName: String?, notes: String?, urlString: String?, dueDateString: String?, priority: Int?) throws -> ReminderJSON {
         let reminder = EKReminder(eventStore: eventStore)
         reminder.calendar = try findList(named: listName)
         reminder.title = title
-        
+
         // Handle URL: store in both URL field and append to notes
         var finalNotes = notes
         if let urlStr = urlString, !urlStr.isEmpty, let url = URL(string: urlStr) {
@@ -252,7 +252,7 @@ class RemindersManager {
             }
         }
         if let finalNotes = finalNotes { reminder.notes = finalNotes }
-        
+
         if let dateStr = dueDateString {
             if let parsedComponents = parseDateComponents(from: dateStr) {
                 reminder.dueDateComponents = parsedComponents
@@ -262,17 +262,23 @@ class RemindersManager {
                 reminder.timeZone = nil
             }
         }
+
+        // Handle priority (0 = none, 1-4 = high, 5 = medium, 6-9 = low)
+        if let priorityValue = priority {
+            reminder.priority = max(0, min(9, priorityValue))
+        }
+
         try eventStore.save(reminder, commit: true)
         return reminder.toJSON()
     }
 
-    func updateReminder(id: String, newTitle: String?, listName: String?, notes: String?, urlString: String?, isCompleted: Bool?, dueDateString: String?) throws -> ReminderJSON {
+    func updateReminder(id: String, newTitle: String?, listName: String?, notes: String?, urlString: String?, isCompleted: Bool?, dueDateString: String?, priority: Int?) throws -> ReminderJSON {
         guard let reminder = findReminder(withId: id) else { throw NSError(domain: "", code: 404, userInfo: [NSLocalizedDescriptionKey: "ID '\(id)' not found."]) }
         if let newTitle = newTitle { reminder.title = newTitle }
-        
+
         // Handle URL: store in both URL field and append to notes
         var finalNotes: String?
-        
+
         if let urlStr = urlString, !urlStr.isEmpty, let url = URL(string: urlStr) {
             reminder.url = url  // Store single URL in URL field
             // If new notes provided and doesn't contain URL, append URL to new notes
@@ -304,9 +310,9 @@ class RemindersManager {
             // No URL and no new notes, keep existing notes
             finalNotes = reminder.notes
         }
-        
+
         if let finalNotes = finalNotes { reminder.notes = finalNotes }
-        
+
         if let isCompleted = isCompleted { reminder.isCompleted = isCompleted }
         if let listName = listName { reminder.calendar = try findList(named: listName) }
         if let dateStr = dueDateString {
@@ -318,6 +324,12 @@ class RemindersManager {
                 reminder.timeZone = nil
             }
         }
+
+        // Handle priority (0 = none, 1-4 = high, 5 = medium, 6-9 = low)
+        if let priorityValue = priority {
+            reminder.priority = max(0, min(9, priorityValue))
+        }
+
         try eventStore.save(reminder, commit: true)
         return reminder.toJSON()
     }
@@ -378,10 +390,6 @@ class RemindersManager {
             throw NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid date format. Use 'YYYY-MM-DD HH:mm:ss' or ISO 8601 format."])
         }
         
-        if let startComponents = parseDateComponents(from: startDateString) {
-            event.timeZone = startComponents.timeZone
-        }
-        
         event.startDate = startDate
         event.endDate = endDate
         event.isAllDay = isAllDay ?? false
@@ -419,10 +427,6 @@ class RemindersManager {
             guard let startDate = parseDate(from: startStr) else {
                 throw NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid start date format."])
             }
-            // Update timezone from start date components if provided
-            if let startComponents = parseDateComponents(from: startStr) {
-                event.timeZone = startComponents.timeZone
-            }
             event.startDate = startDate
         }
         
@@ -431,19 +435,6 @@ class RemindersManager {
                 throw NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid end date format."])
             }
             event.endDate = endDate
-            
-            // Handle end date timezone - EventKit only supports one timezone per event
-            if let endComponents = parseDateComponents(from: endStr), let endTz = endComponents.timeZone {
-                if let existingTz = event.timeZone {
-                    // If start date was provided in this update with a different timezone, reject the conflicting timezones
-                    if startDateString != nil && existingTz.identifier != endTz.identifier {
-                        throw NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "Event start and end dates have different timezones (\(existingTz.identifier) vs \(endTz.identifier)). EventKit events support only one timezone per event. Please use the same timezone for both dates."])
-                    }
-                } else {
-                    // If timezone not set from startDate, use endDate timezone
-                    event.timeZone = endTz
-                }
-            }
         }
         
         if let notesStr = notes { event.notes = notesStr }
@@ -523,7 +514,8 @@ extension EKReminder {
             list: self.calendar.title,
             notes: self.notes,
             url: self.url?.absoluteString,
-            dueDate: formatDueDateWithTimezone(from: self.dueDateComponents, timeZoneHint: self.timeZone)
+            dueDate: formatDueDateWithTimezone(from: self.dueDateComponents, timeZoneHint: self.timeZone),
+            priority: self.priority
         )
     }
 }
@@ -637,11 +629,13 @@ func main() {
                 print(String(data: try encoder.encode(StandardOutput(result: manager.getLists())), encoding: .utf8)!)
             case "create":
                 guard let title = parser.get("title") else { throw NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "--title required."]) }
-                let reminder = try manager.createReminder(title: title, listName: parser.get("targetList"), notes: parser.get("note"), urlString: parser.get("url"), dueDateString: parser.get("dueDate"))
+                let priorityValue = parser.get("priority").flatMap { Int($0) }
+                let reminder = try manager.createReminder(title: title, listName: parser.get("targetList"), notes: parser.get("note"), urlString: parser.get("url"), dueDateString: parser.get("dueDate"), priority: priorityValue)
                 print(String(data: try encoder.encode(StandardOutput(result: reminder)), encoding: .utf8)!)
             case "update":
                 guard let id = parser.get("id") else { throw NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "--id required."]) }
-                let reminder = try manager.updateReminder(id: id, newTitle: parser.get("title"), listName: parser.get("targetList"), notes: parser.get("note"), urlString: parser.get("url"), isCompleted: parser.get("isCompleted").map { $0 == "true" }, dueDateString: parser.get("dueDate"))
+                let updatePriorityValue = parser.get("priority").flatMap { Int($0) }
+                let reminder = try manager.updateReminder(id: id, newTitle: parser.get("title"), listName: parser.get("targetList"), notes: parser.get("note"), urlString: parser.get("url"), isCompleted: parser.get("isCompleted").map { $0 == "true" }, dueDateString: parser.get("dueDate"), priority: updatePriorityValue)
                 print(String(data: try encoder.encode(StandardOutput(result: reminder)), encoding: .utf8)!)
             case "delete":
                 guard let id = parser.get("id") else { throw NSError(domain: "", code: 400, userInfo: [NSLocalizedDescriptionKey: "--id required."]) }

@@ -1,12 +1,11 @@
 /**
- * @fileoverview Comprehensive input validation schemas using Zod for security
- * @module validation/schemas
- * @description Security-focused validation with safe text patterns, URL validation,
- * and length limits to prevent injection attacks and malformed data
+ * validation/schemas.ts
+ * Comprehensive input validation schemas using Zod for security
  */
 
 import { z } from 'zod/v3';
 import { VALIDATION } from '../utils/constants.js';
+import { getTodayStart, getTomorrowStart } from '../utils/dateUtils.js';
 
 // Security patterns – allow printable Unicode text while blocking dangerous control and delimiter chars.
 // Allows standard printable ASCII, extended Latin, CJK, plus newlines/tabs for notes.
@@ -16,6 +15,7 @@ const SAFE_TEXT_PATTERN = /^[\u0020-\u007E\u00A0-\uFFFF\n\r\t]*$/u;
 // Support multiple date formats: YYYY-MM-DD, YYYY-MM-DD HH:mm:ss, or ISO 8601
 // Basic validation - detailed parsing handled by Swift
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}.*$/;
+const BARE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 // URL validation that blocks internal/private network addresses and localhost
 // Prevents SSRF attacks while allowing legitimate external URLs
 const URL_PATTERN =
@@ -24,15 +24,7 @@ const URL_PATTERN =
 // Maximum lengths for security (imported from constants.ts)
 
 /**
- * Schema factory for required safe text validation
- * @param {number} minLength - Minimum character length
- * @param {number} maxLength - Maximum character length
- * @param {string} [fieldName='Text'] - Field name for error messages
- * @returns {ZodString} Validated string schema with security patterns
- * @description
- * - Blocks control characters and dangerous Unicode
- * - Allows printable ASCII, extended Latin, CJK characters
- * - Enforces length limits for security
+ * Schema factory functions for DRY principle and consistent validation
  */
 const createSafeTextSchema = (
   minLength: number,
@@ -48,13 +40,6 @@ const createSafeTextSchema = (
       `${fieldName} contains invalid characters. Only alphanumeric, spaces, and basic punctuation allowed`,
     );
 
-/**
- * Schema factory for optional safe text validation
- * @param {number} maxLength - Maximum character length
- * @param {string} [fieldName='Text'] - Field name for error messages
- * @returns {ZodOptional<ZodString>} Optional validated string schema
- * @description Same security patterns as createSafeTextSchema but allows undefined values
- */
 const createOptionalSafeTextSchema = (maxLength: number, fieldName = 'Text') =>
   z
     .string()
@@ -96,6 +81,58 @@ export const SafeDateSchema = z
   .optional();
 
 /**
+ * Checks if a date string represents today in local timezone
+ */
+// Bare YYYY-MM-DD strings parse in UTC in JS engines, so normalize them to local midnight.
+function parseDateRespectingLocalTimezone(dateString: string): Date | null {
+  if (BARE_DATE_PATTERN.test(dateString)) {
+    const [yearString, monthString, dayString] = dateString.split('-');
+    const year = Number(yearString);
+    const monthIndex = Number(monthString) - 1;
+    const day = Number(dayString);
+    if ([year, monthIndex, day].some(Number.isNaN)) {
+      return null;
+    }
+    return new Date(year, monthIndex, day);
+  }
+
+  const parsedDate = new Date(dateString);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  return parsedDate;
+}
+
+function isTodayDateString(dateString: string): boolean {
+  try {
+    const inputDate = parseDateRespectingLocalTimezone(dateString);
+    if (!inputDate) {
+      return false;
+    }
+    const today = getTodayStart();
+    const tomorrow = getTomorrowStart();
+    return inputDate >= today && inputDate < tomorrow;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Date schema that enforces today-only policy (local timezone)
+ */
+export const TodayOnlyDateSchema = z
+  .string()
+  .regex(
+    DATE_PATTERN,
+    "Date must be in format 'YYYY-MM-DD', 'YYYY-MM-DD HH:mm:ss', or ISO 8601",
+  )
+  .refine(isTodayDateString, {
+    message: 'Date must be today (not past or future dates)',
+  })
+  .optional();
+
+/**
  * Creates a required date schema with validation
  */
 const createRequiredDateSchema = (fieldName: string) =>
@@ -122,6 +159,16 @@ const DueWithinEnum = z
   .optional();
 
 /**
+ * Priority schema (0-9 scale, Apple Reminders: 0=none, 1-4=high, 5=medium, 6-9=low)
+ */
+export const SafePrioritySchema = z
+  .number()
+  .int()
+  .min(0, 'Priority must be at least 0')
+  .max(9, 'Priority cannot exceed 9')
+  .optional();
+
+/**
  * Common field combinations for reusability
  */
 const BaseReminderFields = {
@@ -130,6 +177,7 @@ const BaseReminderFields = {
   note: SafeNoteSchema,
   url: SafeUrlSchema,
   targetList: SafeListNameSchema,
+  priority: SafePrioritySchema,
 };
 
 export const SafeIdSchema = z.string().min(1, 'ID cannot be empty');
@@ -155,6 +203,7 @@ export const UpdateReminderSchema = z.object({
   url: SafeUrlSchema,
   completed: z.boolean().optional(),
   targetList: SafeListNameSchema,
+  priority: SafePrioritySchema,
 });
 
 export const DeleteReminderSchema = z.object({
@@ -219,17 +268,7 @@ export const DeleteReminderListSchema = z.object({
 });
 
 /**
- * Validation error wrapper for consistent error handling across the application
- * @extends Error
- * @class
- * @description Provides structured error information with field-level details for validation failures
- * @param {string} message - Human-readable error message
- * @param {Record<string, string[]>} [details] - Optional field-specific error details
- * @example
- * throw new ValidationError('Invalid input', {
- *   title: ['Title is required', 'Title too long'],
- *   dueDate: ['Invalid date format']
- * });
+ * Validation error wrapper for consistent error handling
  */
 export class ValidationError extends Error {
   constructor(
@@ -242,26 +281,7 @@ export class ValidationError extends Error {
 }
 
 /**
- * Generic validation function with security error handling and detailed logging
- * @template T - Expected type after validation
- * @param {z.ZodSchema<T>} schema - Zod schema to validate against
- * @param {unknown} input - Input data to validate
- * @returns {T} Validated and parsed data
- * @throws {ValidationError} Detailed validation error with field-specific messages
- * @description
- * - Provides detailed field-level error messages
- * - Aggregates multiple validation errors into single error
- * - Includes path information for nested field validation
- * - Throws ValidationError for consistent error handling
- * @example
- * try {
- *   const data = validateInput(CreateReminderSchema, input);
- *   // data is now typed as CreateReminderData
- * } catch (error) {
- *   if (error instanceof ValidationError) {
- *     console.log(error.details); // Field-specific error messages
- *   }
- * }
+ * Generic validation function with security error handling and logging
  */
 export const validateInput = <T>(schema: z.ZodSchema<T>, input: unknown): T => {
   try {

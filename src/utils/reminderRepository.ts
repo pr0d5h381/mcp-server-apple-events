@@ -22,15 +22,17 @@ import {
 
 class ReminderRepository {
   private mapReminder(reminder: ReminderJSON): Reminder {
+    // Pass dueDate as-is from Swift CLI to avoid double timezone conversion
+    const formattedDueDate = reminder.dueDate ?? undefined;
+
     const normalizedReminder = nullToUndefined(reminder, [
       'notes',
       'url',
       'dueDate',
     ]) as Reminder;
 
-    // Pass dueDate as-is from Swift CLI to avoid double timezone conversion
-    if (reminder.dueDate) {
-      normalizedReminder.dueDate = reminder.dueDate;
+    if (formattedDueDate) {
+      normalizedReminder.dueDate = formattedDueDate;
     } else {
       delete normalizedReminder.dueDate;
     }
@@ -77,6 +79,9 @@ class ReminderRepository {
     addOptionalArg(args, '--note', data.notes);
     addOptionalArg(args, '--url', data.url);
     addOptionalArg(args, '--dueDate', data.dueDate);
+    if (data.priority !== undefined) {
+      args.push('--priority', String(data.priority));
+    }
 
     return executeCli<ReminderJSON>(args);
   }
@@ -89,6 +94,9 @@ class ReminderRepository {
     addOptionalArg(args, '--url', data.url);
     addOptionalArg(args, '--dueDate', data.dueDate);
     addOptionalBooleanArg(args, '--isCompleted', data.isCompleted);
+    if (data.priority !== undefined) {
+      args.push('--priority', String(data.priority));
+    }
 
     return executeCli<ReminderJSON>(args);
   }

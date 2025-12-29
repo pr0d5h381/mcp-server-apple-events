@@ -22,7 +22,7 @@ import {
 } from './shared.js';
 
 /**
- * Formats a reminder object as markdown list items
+ * Formats a reminder as a markdown list item
  */
 const formatReminderMarkdown = (reminder: {
   title: string;
@@ -45,6 +45,15 @@ const formatReminderMarkdown = (reminder: {
   return lines;
 };
 
+/**
+ * Permission checking is now handled in Swift layer (EventKitCLI.swift)
+ * Swift layer uses EKEventStore.authorizationStatus() to check permission status
+ * before operations, following EventKit best practices.
+ *
+ * TypeScript layer trusts Swift layer's permission handling and does not
+ * duplicate permission checks here.
+ */
+
 export const handleCreateReminder = async (
   args: RemindersToolArgs,
 ): Promise<CallToolResult> => {
@@ -56,6 +65,7 @@ export const handleCreateReminder = async (
       url: validatedArgs.url,
       list: validatedArgs.targetList,
       dueDate: validatedArgs.dueDate,
+      priority: validatedArgs.priority,
     });
     return formatSuccessMessage(
       'created',
@@ -79,6 +89,7 @@ export const handleUpdateReminder = async (
       isCompleted: validatedArgs.completed,
       list: validatedArgs.targetList,
       dueDate: validatedArgs.dueDate,
+      priority: validatedArgs.priority,
     });
     return formatSuccessMessage(
       'updated',
